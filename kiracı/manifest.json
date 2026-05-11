@@ -1,0 +1,12 @@
+{
+    "name": "Evden Çıkma!",
+    "short_name": "Evden Çıkma",
+    "description": "Kiracı Hayatta Kalma Simülasyonu",
+    "start_url": "./index.html",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#1a1a2e",
+    "theme_color": "#1a1a2e",
+    "categories": ["games"],
+    "icons": []
+}
