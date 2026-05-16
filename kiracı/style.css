@@ -42,7 +42,7 @@ html,body{height:100%;overflow:hidden;background:#0f0f23;color:var(--text);
 #hud-inflation{color:var(--negative)}
 
 /* === GAME SCENE === */
-#scene-wrapper{position:relative;flex:1 1 auto;width:100%;min-height:200px;
+#scene-wrapper{position:relative;flex:0 0 auto;width:100%;aspect-ratio:360/240;
     background:#000;overflow:hidden;border-bottom:3px solid var(--border)}
 #game-canvas{width:100%;height:100%;display:block;image-rendering:pixelated;
     image-rendering:crisp-edges}
@@ -55,7 +55,7 @@ html,body{height:100%;overflow:hidden;background:#0f0f23;color:var(--text);
     to{opacity:1;transform:translateX(-50%) translateY(0)}}
 
 /* === ACTION PANEL === */
-#action-panel{flex:0 0 auto;overflow-y:auto;padding:8px 12px;max-height:40vh;
+#action-panel{flex:1 1 auto;overflow-y:auto;padding:8px 12px;min-height:0;
     -webkit-overflow-scrolling:touch}
 #action-panel::-webkit-scrollbar{display:none}
 .panel{display:none;animation:panelIn .25s ease}
