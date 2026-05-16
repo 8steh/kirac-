@@ -9,10 +9,17 @@ const R={
         this.c.width=this.W; this.c.height=this.H;
         this.ctx.imageSmoothingEnabled=false;
         this.loadImages();
+        // Render döngüsünü hemen başlat (resimleri bekleme)
+        this.loop();
     },
     
     loadImages(){
-        const sources = {
+        // Base64 gömülü veri varsa onu kullan (CORS sorunu olmaz)
+        const sources = (typeof ASSET_DATA !== 'undefined') ? {
+            'bg_room_0': ASSET_DATA.bg_room_0,
+            'bg_job_office': ASSET_DATA.bg_job_office,
+            'chars': ASSET_DATA.chars
+        } : {
             'bg_room_0': 'assets/bg_room_0.png',
             'bg_job_office': 'assets/bg_job_office.png',
             'chars': 'assets/chars.png'
@@ -21,39 +28,21 @@ const R={
         for(let key in sources){
             const img = new Image();
             img.onload = () => { 
-                if(key === 'chars') this.processCharsImage(img);
                 this.imgLoaded++; 
-                if(this.imgLoaded===this.totalImgs) this.loop(); 
             };
-            img.onerror = () => { console.error("Image failed:", key); this.imgLoaded++; if(this.imgLoaded===this.totalImgs) this.loop(); };
+            img.onerror = () => { console.warn("Image not loaded (fallback will be used):", key); this.imgLoaded++; };
             img.src = sources[key];
             this.imgs[key] = img;
         }
     },
 
-    processCharsImage(img){
-        const oc = document.createElement('canvas');
-        oc.width = img.naturalWidth;
-        oc.height = img.naturalHeight;
-        const octx = oc.getContext('2d', { willReadFrequently: true });
-        octx.drawImage(img, 0, 0);
-        const idata = octx.getImageData(0, 0, oc.width, oc.height);
-        const d = idata.data;
-        
-        // Use top-left pixel as background color reference
-        const bgR = d[0], bgG = d[1], bgB = d[2];
-        
-        for(let i=0; i<d.length; i+=4) {
-            // Tolerance to remove noise
-            if(Math.abs(d[i]-bgR) < 15 && Math.abs(d[i+1]-bgG) < 15 && Math.abs(d[i+2]-bgB) < 15) {
-                d[i+3] = 0; // Transparent
-            }
-        }
-        octx.putImageData(idata, 0, 0);
-        this.charsCanvas = oc;
-    },
 
-    loop(){this.frame++; this.draw(); requestAnimationFrame(()=>this.loop())},
+
+    loop(){
+        this.frame++;
+        try { this.draw(); } catch(e) { console.error('Draw error:', e); }
+        requestAnimationFrame(()=>this.loop());
+    },
     r(x,y,w,h,c){this.ctx.fillStyle=c; this.ctx.fillRect(Math.floor(x),Math.floor(y),w,h)},
     dk(hex,a){let n=parseInt(hex.replace('#',''),16);
         let r=Math.max(0,((n>>16)&255)-a),g=Math.max(0,((n>>8)&255)-a),b=Math.max(0,(n&255)-a);
@@ -72,22 +61,16 @@ const R={
             this.drawRoom(lv);
             this.drawFurn(lv);
             
-            // Dynamic character states based on housing level
             if(lv === 0) {
-                // Sleeping properly on the cardboard bed using character index 2 (grey hoodie)
-                this.drawSpriteChar(55, 185, 2, 'sleeping');
+                this.drawSpriteChar(55, 155, 2, 'sleeping'); // Yatağa hizalandı
             } else if (lv === 1) {
-                // Standing near desk (Red jacket)
-                this.drawSpriteChar(135, 120, 0, 'idle');
+                this.drawSpriteChar(135, 148, 0, 'idle');
             } else if (lv >= 2 && lv <= 3) {
-                // Standing in the room (Green hoodie)
-                this.drawSpriteChar(120, 115, 1, 'idle');
+                this.drawSpriteChar(120, 148, 1, 'idle');
             } else if (lv === 4) {
-                // Standing in the room (Orange jacket)
-                this.drawSpriteChar(120, 115, 3, 'idle');
+                this.drawSpriteChar(120, 148, 3, 'idle');
             } else {
-                // Boss standing (Purple hat)
-                this.drawSpriteChar(120, 115, 4, 'idle');
+                this.drawSpriteChar(120, 148, 4, 'idle');
             }
         }
         else{
@@ -110,59 +93,176 @@ const R={
         }
     },
 
-    // --- Actual Pixel Art Character ---
+    // --- High-Detail Realistic Pixel Art Characters ---
     drawSpriteChar(x, y, charIndex, state){
-        const canvas = this.charsCanvas;
-        if(!canvas || canvas.width===0) return;
-        
         const ctx = this.ctx;
         
-        // Image has 5 characters side by side
-        const totalChars = 5;
-        const cw = canvas.width / totalChars; // Width of one character frame
-        const ch = canvas.height; // Height of the character frame
-        
-        // Determine source X based on the character index (0 to 4)
-        const sx = charIndex * cw;
-        const sy = 0;
+        // Base Colors and Darker Shades for Shadows
+        let col = '#e94560'; let colDark = '#c0392b';
+        let pants = '#2c3e50'; let pantsDark = '#1a252f';
+        let skin = '#ffcc99'; let skinDark = '#e6b380';
+        let hair = '#4a2b10'; let hairDark = '#2c1909';
+        let shoe = '#111'; let shoeSole = '#444';
+        let accessory = 'none';
+
+        // İş ve Ev seviyelerine göre renk paletleri
+        if (this.scene === 'room') {
+            const colors = [
+                {c:'#e94560', cd:'#c0392b'}, 
+                {c:'#4ecca3', cd:'#3cb371'}, 
+                {c:'#7b8ab8', cd:'#5a6994'}, 
+                {c:'#f5a623', cd:'#d68910'}, 
+                {c:'#9b59b6', cd:'#8e44ad'}
+            ];
+            let scheme = colors[charIndex] || colors[0];
+            col = scheme.c; colDark = scheme.cd;
+            if(charIndex >= 4) accessory = 'suit';
+        } else {
+            if (this.scene === 'job_clean') { col = '#8e44ad'; colDark='#732d91'; accessory = 'apron'; }
+            if (this.scene === 'job_kurye') { col = '#e94560'; colDark='#c0392b'; accessory = 'helmet'; }
+            if (this.scene === 'job_freelance') { col = '#7f8c8d'; colDark='#636e72'; accessory = 'glasses'; }
+            if (this.scene === 'job_insaat') { col = '#f39c12'; colDark='#d68910'; pants = '#2980b9'; pantsDark='#1f618d'; accessory = 'hardhat'; }
+            if (this.scene === 'job_ofis') { col = '#ecf0f1'; colDark='#bdc3c7'; pants = '#34495e'; pantsDark='#2c3e50'; accessory = 'tie'; }
+            if (this.scene === 'job_yonetici') { col = '#2c3e50'; colDark='#1a252f'; pants = '#1a252f'; pantsDark='#111'; accessory = 'suit'; }
+            if (this.scene === 'job_girisimci') { col = '#111'; colDark='#000'; pants = '#111'; pantsDark='#000'; accessory = 'turtleneck'; hair = '#222'; hairDark='#000';}
+        }
         
         ctx.save();
         ctx.translate(x, y);
         
-        // Define an optimal display scale so they don't look tiny or huge
-        // Assuming original image is high res (e.g., 500x200), we want to scale it down to fit the room.
-        // A standard character height in our room is around 60-80px.
-        const targetHeight = 80;
-        const scale = targetHeight / ch;
-        const drawWidth = cw * scale;
-        
-        if (state === 'sleeping') {
-            // Lying flat, rotate the image 90 degrees and position correctly
-            ctx.rotate(-Math.PI/2);
-            ctx.translate(-targetHeight, drawWidth/2);
-            // Draw a blanket over the sleeping character
-            ctx.drawImage(canvas, sx, sy, cw, ch, 0, 0, drawWidth, targetHeight);
+        if(state === 'sleeping'){
+            // Daha detaylı uyuma animasyonu
+            this.r(0, 10, 14, 12, skin); // Kafa
+            this.r(12, 10, 8, 8, hair); // Yastığa değen saç
+            this.r(14, 14, 28, 10, col); // Gövde üstü görünüyor
+            this.r(10, 8, 42, 18, '#2c3e50'); // Yorgan ana renk
+            this.r(12, 6, 38, 2, '#4b6584'); // Yorgan gölgesi/kıvrımı
             
-            // Blanket over body
-            this.r(15, 0, targetHeight-20, drawWidth, '#374151'); 
+            // Nefes alma animasyonu (Yorgan yavaşça inip kalkar)
+            const breath = Math.sin(this.frame*0.05)*2;
+            this.r(20, 6-breath, 16, 4, '#2c3e50'); // Yorgan tepesi
             
-            // Zzz
-            if(this.frame%80 < 40) this.r(10, -5, 4, 4, '#fff');
-            else this.r(5, -12, 6, 6, '#fff');
-            
+            // Zzz efekti
+            if(this.frame%120 < 60) this.r(-4, 0, 4, 4, '#fff');
+            else this.r(-8, -6, 6, 6, '#fff');
         } else {
-            // Idle or Walk bobbing
-            const bob = (state==='idle') ? Math.sin(this.frame*0.04)*1.5 : (state==='walk' ? Math.sin(this.frame*0.2)*3 : 0);
+            const isIdle = (state==='idle');
+            // Nefes alma (Göğüs inip kalkar)
+            const breath = isIdle ? Math.sin(this.frame*0.05)*1 : 0;
+            // Yürüme döngüsü
+            const bob = isIdle ? 0 : Math.sin(this.frame*0.3)*2;
+            const walkCycle = isIdle ? 0 : this.frame*0.3;
             
-            // Draw shadow at bottom
-            this.ctx.globalAlpha = 0.3;
-            this.r(drawWidth*0.2, targetHeight-4, drawWidth*0.6, 6, '#000');
+            const by = bob;
+
+            // Genel Gölge (Yere Düşen)
+            this.ctx.globalAlpha = 0.4;
+            this.r(-2, 52, 20, 4, '#000');
             this.ctx.globalAlpha = 1;
+
+            // -- ARKA BACAK --
+            let bLegX = 9, bLegY = 32 + by;
+            if(!isIdle) {
+                bLegX += Math.cos(walkCycle)*6; // İleri geri
+                bLegY -= Math.sin(walkCycle)*3 * (Math.sin(walkCycle)>0?1:0); // Sadece yukarı kalkar
+            }
+            this.r(bLegX, bLegY, 6, 14, pantsDark);
+            this.r(bLegX-1, bLegY+14, 8, 4, shoe); // Ayakkabı
+            this.r(bLegX-1, bLegY+18, 8, 2, shoeSole); // Taban gölgesi
+
+            // -- ARKA KOL --
+            let bArmX = 12, bArmY = 16 + by;
+            let bArmRot = isIdle ? 0 : Math.cos(walkCycle)*0.8;
+            ctx.save();
+            ctx.translate(bArmX+3, bArmY+2);
+            ctx.rotate(-bArmRot);
+            this.r(-3, -2, 5, 12, colDark); // Üst kol
+            this.r(-3, 10, 5, 6, skinDark); // El
+            ctx.restore();
+
+            // -- GÖVDE --
+            // Gövde nefes alırken hafif genişler ve yukarı kayar
+            this.r(4, 16 + by - breath, 12, 16 + breath, colDark); // Gövde gölgesi (sol/arka)
+            this.r(6, 16 + by - breath, 10, 16 + breath, col); // Gövde ana renk
+            this.r(6, 30 + by, 10, 3, pantsDark); // Kemer/Pantolon başlangıcı
+
+            // -- KAFA VE YÜZ --
+            let headY = by - breath;
+            this.r(4, 2+headY, 12, 14, skinDark); // Boyun/yan gölge
+            this.r(6, 2+headY, 12, 14, skin); // Kafa ana renk
             
-            // Draw character
-            ctx.drawImage(canvas, sx, sy, cw, ch, 0, bob, drawWidth, targetHeight);
+            // Burun
+            this.r(18, 8+headY, 2, 3, skinDark);
+            
+            // Saç detayları
+            if (accessory !== 'helmet' && accessory !== 'hardhat') {
+                this.r(5, headY, 14, 4, hair);
+                this.r(4, headY+2, 2, 6, hairDark); // Arka saç
+                this.r(6, headY, 12, 2, hairDark); // Saç tepesi gölge
+                this.r(16, headY+2, 4, 3, hair); // Kahkül
+            }
+
+            // Gözler ve Göz Kırpma Animasyonu
+            const isBlinking = (this.frame % 150 < 5);
+            if (accessory === 'glasses') {
+                this.r(12, 6+headY, 6, 4, '#222'); // Çerçeve
+                this.r(13, 7+headY, 2, 2, '#fff'); // Cam parlaması
+                this.r(6, 7+headY, 6, 2, '#222'); // Gözlük sapı
+            } else {
+                if(isBlinking) {
+                    this.r(14, 8+headY, 3, 1, hairDark); // Kapalı göz
+                } else {
+                    this.r(14, 7+headY, 3, 3, '#fff'); // Göz akı
+                    this.r(15, 8+headY, 2, 2, '#111'); // Göz bebeği
+                }
+            }
+            
+            // Ağız
+            this.r(15, 12+headY, 3, 1, '#c0392b');
+
+            // -- AKSESUARLAR --
+            if (accessory === 'helmet') {
+                this.r(4, -2+headY, 16, 8, '#c0392b'); // Kask kubbe
+                this.r(2, 4+headY, 6, 8, '#a93226'); // Kulaklık / yan kısım
+                this.r(14, 2+headY, 8, 2, '#f1c40f'); // Vizör çizgisi
+            }
+            if (accessory === 'hardhat') {
+                this.r(4, -2+headY, 16, 7, '#f1c40f'); 
+                this.r(16, 4+headY, 6, 2, '#f1c40f'); // Siperlik
+            }
+            if (accessory === 'suit') {
+                this.r(10, 16+headY, 4, 10, '#ecf0f1'); // Beyaz gömlek V yaka
+                this.r(11, 18+headY, 2, 8, '#c0392b'); // Kırmızı kravat
+                this.r(6, 16+headY, 4, 16, colDark); // Ceket yakası (gölge efekti)
+            }
+            if (accessory === 'tie') {
+                this.r(11, 16+headY, 2, 10, '#2980b9'); // Mavi kravat
+            }
+            if (accessory === 'apron') {
+                this.r(5, 24+by, 12, 12, '#bdc3c7'); // Önlük
+                this.r(5, 24+by, 12, 2, '#95a5a6'); // Önlük kemeri
+            }
+
+            // -- ÖN BACAK --
+            let fLegX = 5, fLegY = 32 + by;
+            if(!isIdle) {
+                fLegX -= Math.cos(walkCycle)*6; // Ters yönde sallanır
+                fLegY -= Math.sin(walkCycle + Math.PI)*3 * (Math.sin(walkCycle + Math.PI)>0?1:0); 
+            }
+            this.r(fLegX, fLegY, 6, 14, pants);
+            this.r(fLegX, fLegY+14, 8, 4, shoe); // Ayakkabı
+            this.r(fLegX, fLegY+18, 8, 2, shoeSole); // Taban gölgesi
+
+            // -- ÖN KOL --
+            let fArmX = 6, fArmY = 16 + by - breath;
+            let fArmRot = isIdle ? 0 : Math.cos(walkCycle)*0.8;
+            ctx.save();
+            ctx.translate(fArmX+3, fArmY+2);
+            ctx.rotate(fArmRot); // Omuzdan dönüş
+            this.r(-3, -2, 5, 12, col); // Üst kol
+            this.r(-3, 10, 5, 6, skin); // El
+            ctx.restore();
         }
-        
         ctx.restore();
     },
 
@@ -171,18 +271,18 @@ const R={
     sceneClean(t){
         this.r(0,0,240,280,'#2c2520');
         for(let x=0; x<240; x+=40) this.r(x, 0, 2, 280, '#1a1510'); // wallpaper stripes
-        this.r(0, 200, 240, 80, '#4a3b32'); // floor
+        for(let x=0; x<240; x+=40) this.r(x, 0, 2, 280, '#1a1510');
+        this.r(0, 200, 240, 80, '#4a3b32');
         
         const cx = t<60 ? t*2-40 : 80;
         const walkState = t<60 ? 'walk' : 'idle';
         
-        this.drawSpriteChar(cx, 115, 0, walkState);
+        this.drawSpriteChar(cx, 148, 0, walkState);
         
-        // Broom
         if(t>60){
             const sweep = Math.sin(t*0.2)*10;
-            this.r(cx-10+sweep, 175, 4, 30, '#8b6914');
-            this.r(cx-15+sweep, 205, 14, 6, '#2a2a2a');
+            this.r(cx-10+sweep, 160, 4, 30, '#8b6914');
+            this.r(cx-15+sweep, 190, 14, 6, '#2a2a2a');
         }
         this.drawJobLabel('🧹 Temizlik yapılıyor...', t);
     },
@@ -201,16 +301,11 @@ const R={
         const mx = 100;
         const bounce = Math.sin(t*0.4)*2;
         
-        // Scooter
-        this.r(mx-20, 160+bounce, 40, 15, '#e94560');
-        this.r(mx-15, 170+bounce, 12, 12, '#111'); // wheel
-        this.r(mx+15, 170+bounce, 12, 12, '#111'); // wheel
+        this.r(mx-20, 145+bounce, 40, 15, '#e94560');
+        this.r(mx-15, 155+bounce, 12, 12, '#111'); 
+        this.r(mx+15, 155+bounce, 12, 12, '#111');
         
-        // Char on scooter
-        this.drawSpriteChar(mx-10, 85+bounce, 0, 'idle');
-        
-        // Helmet
-        this.r(mx-14, 115+bounce, 20, 12, '#e94560');
+        this.drawSpriteChar(mx-10, 95+bounce, 1, 'idle');
         
         if(t>20){for(let i=0;i<6;i++){
             this.ctx.globalAlpha=0.4;
@@ -222,37 +317,31 @@ const R={
 
     sceneFreelance(t){
         this.r(0,0,240,280,'#111827');
-        this.r(50, 180, 140, 10, '#4b5563'); // desk
+        this.r(50, 180, 140, 10, '#4b5563'); 
         
-        // Monitors
         this.r(70, 130, 40, 30, '#1f2937');
-        this.r(72, 132, 36, 26, '#3b82f6'); // screen 1
+        this.r(72, 132, 36, 26, '#3b82f6'); 
         this.r(120, 130, 40, 30, '#1f2937');
-        this.r(122, 132, 36, 26, '#10b981'); // screen 2
+        this.r(122, 132, 36, 26, '#10b981'); 
         
-        // Code scrolling
         for(let i=0;i<4;i++){
             this.r(74, 134+i*6- (t*0.5)%6, 20+Math.random()*10, 2, '#fff');
         }
 
-        this.drawSpriteChar(90, 105, 0, 'idle');
+        this.drawSpriteChar(90, 148, 2, 'idle');
         this.drawJobLabel('💻 Kod yazılıyor...', t);
     },
 
     sceneInsaat(t){
-        this.r(0,0,240,200,'#60a5fa'); // sky
-        this.r(0,200,240,80,'#a16207'); // dirt
-        // Scaffolding
+        this.r(0,0,240,200,'#60a5fa'); 
+        this.r(0,200,240,80,'#a16207'); 
         for(let x=20; x<220; x+=40){
             this.r(x, 40, 4, 160, '#fcd34d');
             for(let y=60; y<200; y+=40) this.r(x, y, 40, 4, '#fcd34d');
         }
         
         const cx = 100;
-        this.drawSpriteChar(cx, 115, 0, t%20<10?'walk':'idle');
-        
-        // Hard hat
-        this.r(cx-10, 150, 22, 8, '#fbbf24');
+        this.drawSpriteChar(cx, 148, 3, t%20<10?'walk':'idle');
         
         this.drawJobLabel('🏗️ İnşaatta ter dökülüyor...', t);
     },
@@ -264,32 +353,31 @@ const R={
             this.r(0,0,240,280,'#e5e7eb');
             this.r(0,180,240,100,'#9ca3af');
         }
-        this.drawSpriteChar(80, 115, 4, 'idle');
+        this.drawSpriteChar(80, 148, 4, 'idle');
         this.drawJobLabel('👔 Ofiste rapor hazırlanıyor...', t);
     },
 
     sceneYonetici(t){
         this.r(0,0,240,280,'#1e1b4b');
-        this.r(40,40,160,100,'#312e81'); // window
-        for(let i=0;i<5;i++) this.r(40+i*32, 40, 4, 100, '#1e1b4b'); // window bars
+        this.r(40,40,160,100,'#312e81'); 
+        for(let i=0;i<5;i++) this.r(40+i*32, 40, 4, 100, '#1e1b4b'); 
         
-        this.r(20, 200, 200, 15, '#451a03'); // luxury desk
+        this.r(20, 200, 200, 15, '#451a03'); 
         
-        this.drawSpriteChar(120, 115, 4, 'idle');
+        this.drawSpriteChar(120, 148, 4, 'idle');
         this.drawJobLabel('💼 Yönetim kurulu toplantısı...', t);
     },
 
     sceneGirisimci(t){
         this.r(0,0,240,280,'#f8fafc');
-        this.r(40, 40, 160, 120, '#cbd5e1'); // projector screen
+        this.r(40, 40, 160, 120, '#cbd5e1'); 
         
-        // Graph growing
         const growth = Math.min(t, 100);
         this.r(50, 140-growth, 10, growth, '#10b981');
         this.r(90, 140-growth*1.2, 10, growth*1.2, '#10b981');
         this.r(130, 140-growth*1.5, 10, growth*1.5, '#10b981');
         
-        this.drawSpriteChar(170, 115, 4, t%40<20?'walk':'idle');
+        this.drawSpriteChar(170, 148, 4, t%40<20?'walk':'idle');
         this.drawJobLabel('🚀 Yatırımcı sunumu...', t);
     },
 
@@ -332,7 +420,16 @@ const R={
     },
 
     drawFurn(lv){
-        if(lv===0) return; // Background image handles furn for level 0
+        if(lv===0){
+            // Seviye 0 basit mobilya (karton yatak, battaniye)
+            this.r(45, 188, 50, 10, '#6b5344'); // karton yatak
+            this.r(47, 182, 46, 6, '#8b7355'); // yastık
+            this.r(47, 180, 14, 4, '#ddd'); // yastık üstü
+            // Kovalar/eşyalar
+            this.r(180, 184, 12, 14, '#555'); // kova
+            this.r(195, 188, 8, 10, '#777'); // kutu
+            return;
+        }
         const beds=[['#664'],['#865'],['#a75'],['#b86'],['#c97'],['#da8'],['#fb9']];
         const bc=beds[lv][0];
         const bw=35+lv*5,bh=35+lv*3;

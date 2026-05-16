@@ -31,6 +31,14 @@ function initGame(){
     setupNav();
     R.init();
     renderUI();
+    
+    // Ticker Setup
+    const ticker = document.getElementById('ticker-text');
+    ticker.textContent = FUNNY_NEWS[Math.floor(Math.random()*FUNNY_NEWS.length)];
+    ticker.addEventListener('animationiteration', () => {
+        ticker.textContent = FUNNY_NEWS[Math.floor(Math.random()*FUNNY_NEWS.length)];
+    });
+
     if(!saved)showModal('🏚️','Evden Çıkma!','Hoş geldin! Bodrum katta\nbaşlıyorsun.\n\nÇalış, kira öde, hayatta kal.\nHedef: Köşk sahibi olmak!','','Başla!');
     document.addEventListener('touchstart',()=>{if(!SFX.ctx)SFX.init()},{once:true});
     document.addEventListener('click',()=>{if(!SFX.ctx)SFX.init()},{once:true});
@@ -42,36 +50,42 @@ function getSeason(m){return SEASONS[(Math.floor((m-1)/3))%4]}
 function getRent(){let r=S.rent;if(S.rentDiscountThisMonth>0)r*=(1-S.rentDiscountThisMonth);return Math.floor(r)}
 function jobIncome(j){return Math.floor(j.income*S.permanentBonus.income*S.inflation)}
 function jobOpen(j){return S.housingLevel>=j.unlockLevel&&S.totalDays>=j.unlockDay}
+function getMaxEnergy(){let mx=S.maxEnergy+S.permanentBonus.energy; if(S.items.coffee>0)mx=Math.floor(mx*1.1); return mx;}
 function canUp(){if(S.housingLevel>=6)return false;const h=HOUSING[S.housingLevel];
     const cost=S.items.realtor?Math.floor(h.reqSavings*.7):h.reqSavings;
     return S.consecutiveMonths>=h.reqMonths&&S.money>=cost}
 function upCost(){if(S.housingLevel>=6)return 0;const c=HOUSING[S.housingLevel].reqSavings;
     return S.items.realtor?Math.floor(c*.7):c}
-function addLog(t,tp){S.log.unshift({text:t,type:tp,day:S.day,month:S.month});if(S.log.length>30)S.log.length=30}
+
+let actionTextTimeout;
+function addLog(t,tp){
+    S.log.unshift({text:t,type:tp,day:S.day,month:S.month});if(S.log.length>30)S.log.length=30;
+    const at = document.getElementById('action-text');
+    if(at) {
+        at.textContent = t;
+        at.className = 'act-' + (tp||'info');
+        if(actionTextTimeout) clearTimeout(actionTextTimeout);
+        actionTextTimeout = setTimeout(() => {
+            at.classList.add('hidden');
+        }, 3500);
+    }
+}
 
 // ===== WORK WITH ANIMATION =====
 let isWorking=false;
 function doWork(idx){
     const j=JOBS[idx];
     if(!jobOpen(j)||S.lostJobToday||S.energy<j.energy||isWorking)return;
-    isWorking=true;
     SFX.click();
-    // Switch to home tab to show animation
-    document.querySelectorAll('.panel').forEach(s=>s.classList.remove('active'));
-    document.getElementById('panel-actions').classList.add('active');
-    document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
-    document.querySelector('.nav-btn[data-panel="actions"]').classList.add('active');
-    // Play job animation on canvas
-    R.playJob(idx, ()=>{
-        // Animation done - apply rewards
-        S.energy-=j.energy;
-        const e=jobIncome(j);
-        S.money+=e;S.totalEarned+=e;
-        addLog(`${j.emoji} ${j.name}: +${fmt(e)} TL`,'positive');
-        SFX.coin();spawnCoins(4);bumpMoney();
-        isWorking=false;
-        renderUI();checkAch();SV.save(S);
-    });
+    // Ödülleri hemen uygula (animasyonu bekleme)
+    S.energy-=j.energy;
+    const e=jobIncome(j);
+    S.money+=e;S.totalEarned+=e;
+    addLog(`${j.emoji} ${j.name}: +${fmt(e)} TL`,'positive');
+    SFX.coin();spawnCoins(4);bumpMoney();
+    renderUI();checkAch();SV.save(S);
+    // Animasyonu arka planda oynat (opsiyonel görsel efekt)
+    try { R.playJob(idx, null); } catch(err) {}
 }
 
 function nextDay(n){
@@ -82,8 +96,9 @@ function nextDay(n){
 function advDay(){
     if(S.gameWon)return;
     S.totalDays++;S.day++;S.lostJobToday=false;S.rentDiscountThisMonth=0;
-    let mx=S.maxEnergy+S.permanentBonus.energy;
-    if(S.items.coffee>0){mx=Math.floor(mx*1.1);S.items.coffee--}
+    S.dailyEnergyBuys = 0; // Günlük enerji limiti sıfırlanır
+    if(S.items.coffee>0) S.items.coffee--; // Önce kahve günü azalır (geceden sabaha)
+    let mx=getMaxEnergy();
     S.energy=mx;
     if(S.items.sideapp){const p=Math.floor(100*S.inflation);S.money+=p;S.totalEarned+=p}
     if(S.items.renovationDays>0)S.items.renovationDays--;
@@ -164,7 +179,7 @@ function applyEvt(ev){
     if(ev.loseJob){S.lostJobToday=true;SFX.bad()}
     if(ev.reward){const r=Math.floor(ev.reward*S.inflation);S.money+=r;S.totalEarned+=r;
         msg+=` +${fmt(r)} TL`;tp='positive';SFX.coin();spawnCoins(3)}
-    if(ev.energyBonus){S.energy=Math.min(S.energy+ev.energyBonus,S.maxEnergy+S.permanentBonus.energy);
+    if(ev.energyBonus){S.energy=Math.min(S.energy+ev.energyBonus,getMaxEnergy());
         msg+=` ⚡+${ev.energyBonus}`;tp='positive';SFX.coin()}
     if(ev.rentDiscount){S.rentDiscountThisMonth=ev.rentDiscount;tp='positive';SFX.coin()}
     addLog(msg,tp);
@@ -179,10 +194,33 @@ function buyItem(id){
     const pr=Math.floor(it.price*S.inflation);
     if(S.money<pr){showToast('Paran yetmiyor!','negative');return}
     if(it.type==='permanent'&&S.items[id]){showToast('Zaten sahipsin!','negative');return}
+    
+    if(it.type==='instant') {
+        if((S.dailyEnergyBuys || 0) >= 2) {
+            showToast('Günlük limit doldu! (Max 2)', 'negative');
+            return;
+        }
+        if(S.energy >= getMaxEnergy()) {
+            showToast('Enerjin zaten tam dolu!', 'negative');
+            return;
+        }
+    }
+    
     if(it.type==='permanent')S.items[id]=true;
     else if(id==='coffee')S.items.coffee+=3;
     else if(id==='protection')S.items.protection++;
     else if(id==='renovation')S.items.renovationDays=30;
+    else if(id==='energy_drink') {
+        S.energy = Math.min(S.energy + 50, getMaxEnergy());
+        S.dailyEnergyBuys = (S.dailyEnergyBuys || 0) + 1;
+    }
+    else if(id==='fruit_plate') {
+        S.energy = Math.min(S.energy + 100, getMaxEnergy());
+        S.dailyEnergyBuys = (S.dailyEnergyBuys || 0) + 1;
+    }
+    
+    if(id==='gym_sub') S.permanentBonus.energy += 20;
+
     S.money-=pr;S.totalSpent+=pr;SFX.coin();
     addLog(`🛒 ${it.emoji} ${it.name} alındı! -${fmt(pr)} TL`,'info');
     showToast(`${it.emoji} ${it.name} alındı!`,'gold');
@@ -201,7 +239,7 @@ function renderUI(){
     document.getElementById('hud-pos').textContent=h.name;
     document.getElementById('hud-money').textContent=fmt(S.money);
     
-    const mx=S.maxEnergy+S.permanentBonus.energy;
+    const mx=getMaxEnergy();
     const eP=(S.energy/mx)*100;
     const ef=document.getElementById('bar-energy');
     ef.style.width=eP+'%';
@@ -219,10 +257,6 @@ function renderUI(){
     document.getElementById('hud-season').textContent=se+' '+S.season.charAt(0).toUpperCase()+S.season.slice(1);
     document.getElementById('hud-day').textContent=`Gün ${S.day} • Ay ${S.month}`;
     document.getElementById('hud-inflation').textContent='📈 %'+Math.floor((S.inflation-1)*100);
-
-
-    // Ticker
-    if(S.log.length>0)document.getElementById('ticker-text').textContent=S.log[0].text;
 
     renderJobs();renderShop();renderStats();renderAch();
 }
@@ -245,17 +279,19 @@ function renderShop(){
     const c=document.getElementById('shop-container');c.innerHTML='';
     SHOP_ITEMS.forEach(it=>{
         const pr=Math.floor(it.price*S.inflation),ow=it.type==='permanent'&&S.items[it.id],af=S.money>=pr;
+        let limitReached = (it.type === 'instant' && (S.dailyEnergyBuys || 0) >= 2);
         const d=document.createElement('div');
-        d.className='shop-card'+(ow?' owned':'')+(!af&&!ow?' cant-afford':'');
+        d.className='shop-card'+(ow?' owned':'')+(!af&&!ow?' cant-afford':'')+(limitReached?' btn-disabled':'');
         let st=`💰 ${fmt(pr)} TL`;
         if(ow)st='✅ Sahipsin';
+        else if(limitReached)st='❌ Günlük Limit';
         else if(it.id==='coffee'&&S.items.coffee>0)st+=` (${S.items.coffee} gün)`;
         else if(it.id==='protection')st+=` (${S.items.protection} adet)`;
         else if(it.id==='renovation'&&S.items.renovationDays>0)st+=` (${S.items.renovationDays} gün)`;
         d.innerHTML=`<span class="shop-emoji">${it.emoji}</span><div class="shop-info">
             <div class="shop-name">${it.name}</div><div class="shop-desc">${it.desc}</div>
             <div class="shop-price">${st}</div></div>`;
-        if(!ow)d.onclick=()=>buyItem(it.id);
+        if(!ow && !limitReached)d.onclick=()=>buyItem(it.id);
         c.appendChild(d)});
 }
 
