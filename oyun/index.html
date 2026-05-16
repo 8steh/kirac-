@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="Evden Çıkma! - Kiracı Hayatta Kalma Simülasyonu">
+    <title>Evden Çıkma! 🏠</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- TOP HUD -->
+        <header id="hud-top">
+            <div id="hud-left">
+                <div class="hud-level">Sv.<span id="hud-lv">1</span></div>
+                <div class="hud-position" id="hud-pos">Bodrum Kat</div>
+            </div>
+            <div id="hud-right">
+                <span class="coin-icon">🪙</span>
+                <span id="hud-money">500</span>
+            </div>
+        </header>
+
+        <!-- STAT BARS -->
+        <div id="hud-bars">
+            <div class="bar-row">
+                <span class="bar-label">Enerji</span>
+                <div class="bar-track energy-track"><div id="bar-energy" class="bar-fill energy-fill"></div></div>
+                <span class="bar-val" id="val-energy">100/100</span>
+            </div>
+            <div class="bar-row">
+                <span class="bar-label">Kira</span>
+                <div class="bar-track rent-track"><div id="bar-rent" class="bar-fill rent-fill"></div></div>
+                <span class="bar-val" id="val-rent">30 gün</span>
+            </div>
+            <div class="bar-row-sub">
+                <span id="hud-season">🌸 İlkbahar</span>
+                <span id="hud-day">Gün 1 • Ay 1</span>
+                <span id="hud-inflation">📈 %0</span>
+            </div>
+        </div>
+
+        <!-- GAME SCENE (Canvas) -->
+        <div id="scene-wrapper">
+            <canvas id="game-canvas"></canvas>
+            <div id="scene-overlay">
+                <div id="scene-event" class="hidden"></div>
+            </div>
+        </div>
+
+        <!-- ACTION PANEL -->
+        <div id="action-panel">
+            <!-- Screens swap here -->
+            <section id="panel-actions" class="panel active">
+                <button id="btn-next" class="act-btn next-btn" style="width:100%" onclick="nextDay(1)">⏩ Sonraki Gün</button>
+                <button id="btn-fast" class="act-btn fast-btn" style="width:100%" onclick="nextDay(5)">⏭️ 5 Gün İlerle</button>
+            </section>
+            <section id="panel-jobs" class="panel">
+                <div id="jobs-container"></div>
+            </section>
+            <section id="panel-shop" class="panel">
+                <div id="shop-container"></div>
+            </section>
+            <section id="panel-stats" class="panel">
+                <div id="stats-container"></div>
+            </section>
+            <section id="panel-achievements" class="panel">
+                <div id="achievements-container"></div>
+            </section>
+        </div>
+
+        <!-- LOG TICKER -->
+        <div id="log-ticker">
+            <span id="ticker-text">Bodrum katta yeni bir gün başlıyor...</span>
+            <span id="action-text" class="hidden"></span>
+        </div>
+
+        <!-- BOTTOM NAV -->
+        <nav id="bottom-nav">
+            <button class="nav-btn active" data-panel="actions"><span class="nav-icon">🏠</span><span class="nav-text">Ev</span></button>
+            <button class="nav-btn" data-panel="jobs"><span class="nav-icon">💼</span><span class="nav-text">İş</span></button>
+            <button class="nav-btn" data-panel="shop"><span class="nav-icon">🛒</span><span class="nav-text">Dükkan</span></button>
+            <button class="nav-btn" data-panel="stats"><span class="nav-icon">📊</span><span class="nav-text">Bilgi</span></button>
+            <button class="nav-btn" data-panel="achievements"><span class="nav-icon">🏆</span><span class="nav-text">Rozet</span></button>
+        </nav>
+
+        <!-- MODAL -->
+        <div id="modal-overlay" class="modal-overlay hidden">
+            <div id="modal-box" class="modal-box">
+                <div id="modal-emoji" class="modal-emoji"></div>
+                <h2 id="modal-title" class="modal-title"></h2>
+                <p id="modal-body" class="modal-body"></p>
+                <div id="modal-extra" class="modal-extra"></div>
+                <button id="modal-btn" class="act-btn next-btn">Tamam</button>
+                <button id="modal-btn2" class="act-btn fast-btn hidden">İptal</button>
+            </div>
+        </div>
+
+        <!-- TOAST -->
+        <div id="toast" class="toast hidden"><span id="toast-msg"></span></div>
+        <!-- FX -->
+        <div id="fx-layer"></div>
+    </div>
+
+    <script src="assets.js?v=2"></script>
+    <script src="data.js?v=2"></script>
+    <script src="renderer.js?v=2"></script>
+    <script src="game.js?v=2"></script>
+</body>
+</html>
